@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "Kakeibo",
+    "slug": "kakeibo-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.kakeibo.expensetracker"
+    },
+    "android": {
+      "package": "com.kakeibo.expensetracker"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Allow Kakeibo to photograph your receipts.",
+          "photosPermission": "Allow Kakeibo to select receipt photos.",
+          "microphonePermission": false
+        }
+      ],
+      "expo-font"
+    ]
+  }
+}

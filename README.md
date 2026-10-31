@@ -340,6 +340,89 @@ npm run preview
 
 Vite prints the local preview URL in the terminal.
 
+## Mobile Receipt Test
+
+The Expo app in `mobile/` is a receipt-scanning companion. Test camera capture on
+a physical iOS or Android device with Expo Go; a web export only tests the web
+fallback and does not verify native camera permissions.
+
+### Configure the APIs
+
+Install the mobile dependencies from the repository root:
+
+```powershell
+npm.cmd --prefix mobile install
+```
+
+Copy the mobile URL template to a local, ignored environment file:
+
+```powershell
+Copy-Item mobile/.env.example mobile/.env.local
+```
+
+Find the computer's active Wi-Fi IPv4 address with `ipconfig`. Replace
+`YOUR_COMPUTER_LAN_IP` in `mobile/.env.local` with that address, for example:
+
+```env
+EXPO_PUBLIC_RECEIPT_API_URL=http://192.168.0.18:3002
+EXPO_PUBLIC_TRANSACTION_API_URL=http://192.168.0.18:3000
+```
+
+The phone and computer must be on the same trusted Wi-Fi network. These are
+addresses, not secrets. Never put Veryfi or TypeSafe API keys in an
+`EXPO_PUBLIC_` variable; keep provider credentials in the root `.env` used by
+the receipt server.
+
+**Local-network limitation:** `server/receipt-api.js` currently binds to
+`127.0.0.1`, which accepts connections only from the computer itself. A physical
+phone cannot reach that address or the current local receipt API. Before using
+these local URLs on a phone, make the receipt API listen on the computer's LAN
+interface, or point `EXPO_PUBLIC_RECEIPT_API_URL` at a deployed, reachable
+receipt API. Keep the local API limited to a trusted network: it has no
+authentication and can use paid provider credentials. Stop it after testing.
+
+The transaction API at port 3000 must also be reachable from the phone. If the
+phone cannot load `http://YOUR_COMPUTER_LAN_IP:3000/categories`, check its bind
+address and Windows Firewall's Private network rules. Do not expose either
+development API to a public network.
+
+### Start And Test
+
+Start the transaction API and receipt API in separate terminals from the
+repository root:
+
+```powershell
+npm.cmd run server
+npm.cmd run receipt-api
+```
+
+The receipt server reads Veryfi and Jev credentials from the root `.env` file.
+Only configure them if testing live provider calls; parser and category-suggestion
+responses can otherwise be tested with mocked services. Never commit `.env`.
+
+In another terminal, start Expo from the repository root:
+
+```powershell
+npm.cmd --prefix mobile start -- --lan
+```
+
+Open the project in Expo Go by scanning the QR code. Allow camera access, take a
+receipt photo, and check the following:
+
+- The captured image previews correctly and can be scanned.
+- All purchases, quantities and line totals are editable; adding and removing
+  purchases works.
+- Categories load from the transaction API and can be selected manually.
+- Jev suggestions prefill only confident results; uncertain or unclassified
+  items remain reviewable. The final review is required before saving.
+- Saved purchase amounts sum to the receipt total, with no extra transaction for
+  the receipt total. Confirm each purchase appears in transaction history.
+- If testing live providers, verify provider errors leave manual category entry
+  available and never save without review.
+
+Stop Expo and both local APIs after testing. The mobile app stores only API
+addresses in `mobile/.env.local`; keep paid provider keys on the receipt server.
+
 ## Deployment
 
 **Live application:** https://aie1f-team-3-kakeibo.netlify.app
