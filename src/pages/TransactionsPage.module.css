@@ -23,9 +23,36 @@
   transform: translateY(-1px);
 }
 .resultCount {
-  margin: 0 0 12px;
+  margin: 0;
   color: var(--muted);
   font-size: 0.82rem;
+}
+.resultToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: 12px;
+}
+.exportButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--ink);
+  background: var(--surface);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.exportButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .statementPanel {
   overflow: hidden;
@@ -40,6 +67,9 @@
 }
 
 @media (max-width: 600px) {
+  .resultToolbar {
+    align-items: flex-start;
+  }
   .addButton {
     width: 100%;
   }

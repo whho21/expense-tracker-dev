@@ -10,12 +10,16 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest --watch",
-    "server": "json-server --watch data/db.json --port 3000",
+    "server": "node --env-file-if-exists=.env server/api.js",
+    "server:demo": "json-server --watch data/db.json --port 3000",
+    "db:migrate": "node --env-file-if-exists=.env server/migrate.js",
+    "db:import-json": "node --env-file-if-exists=.env server/import-json.js",
     "receipt-api": "node --env-file=.env server/receipt-api.js"
   },
   "dependencies": {
     "json-server": "^1.0.0-beta.15",
     "lucide-react": "^1.46.0",
+    "pg": "^8.23.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router": "^7.18.4",

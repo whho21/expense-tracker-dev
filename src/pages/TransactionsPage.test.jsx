@@ -49,6 +49,16 @@ describe("TransactionsPage", () => {
     expect(screen.getByText("1 transaction found")).toBeInTheDocument();
   });
 
+  it("offers CSV export for matching transactions and disables it for an empty result", () => {
+    renderTransactionsPage();
+    expect(screen.getByRole("button", { name: "Export transactions to CSV" })).toBeEnabled();
+  });
+
+  it("disables CSV export when there are no matching transactions", () => {
+    renderTransactionsPage({ displayedTransactions: [] });
+    expect(screen.getByRole("button", { name: "Export transactions to CSV" })).toBeDisabled();
+  });
+
   it("shows the loading spinner while loading", () => {
     renderTransactionsPage({ loading: true, displayedTransactions: [] });
 

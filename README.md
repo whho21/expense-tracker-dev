@@ -32,7 +32,8 @@ The target user is someone who wants a lightweight personal budgeting and expens
 - Prevent deletion of categories that are already assigned to transactions
 - Responsive layouts for selected views; full mobile-width support remains to be verified
 - Loading and error handling for API operations
-- Configurable API data source using local JSON Server or a hosted MockAPI endpoint
+- PostgreSQL-backed transaction and category API with a one-time JSON Server data importer
+- CSV export for the currently filtered transaction list
 
 ### Bonus Challenges: Easy & Medium
 
@@ -70,8 +71,9 @@ Authentication is mocked in the frontend for this school project; it is not prod
 | `useReducer` | Transaction state management |
 | `useState` / `useEffect` / `useMemo` | Local state, data fetching and derived state |
 | Yup | Form validation |
-| JSON Server | Local mock REST API backed by `data/db.json` |
-| MockAPI | Optional hosted mock backend when configured with its API base URL |
+| PostgreSQL | Persistent storage for categories, transactions and receipt metadata |
+| `pg` | Node.js PostgreSQL connection pool and parameterized queries |
+| JSON Server | Optional legacy demo API used only for importing or comparing local data |
 | CSS Modules | Component/page styling |
 | Lucide React | UI icons |
 | Git / GitHub | Source control and team collaboration |
@@ -105,6 +107,96 @@ Kakeibo keeps categories separate from transactions. The transaction references 
 ```
 
 This avoids duplicating the transaction type in both the category and transaction records.
+
+## PostgreSQL API
+
+The app's `/transactions` and `/categories` REST routes are served by
+`server/api.js` and stored in PostgreSQL. Transaction receipt attributes are
+retained in a JSONB metadata column; the API returns those metadata properties at
+the top level to preserve the existing web and Expo client contract. Amounts are
+stored as `numeric(12, 2)` and category foreign keys prevent deleting a category
+that is still assigned to a transaction.
+
+The repository does not provision or host PostgreSQL. Create a database locally
+or with a managed provider first. Before importing, back up any database that
+already contains data. Keep the connection string in the ignored root `.env`
+file; never commit it or put it in a `VITE_` or `EXPO_PUBLIC_` variable.
+
+```env
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DATABASE
+API_HOST=127.0.0.1
+API_PORT=3000
+CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+```
+
+#### Initial Setup And Demo Data Import
+
+Run these commands from the repository root:
+
+1. Copy `.env.example` to `.env` if you have not already, then replace the
+  `DATABASE_URL` placeholder with the connection string for the database you
+  just created. Keep `VITE_API_BASE_URL=http://localhost:3000` for local use.
+2. Apply the initial schema. This creates the `categories` and `transactions`
+  tables and their constraints and indexes:
+
+  ```powershell
+  npm.cmd run db:migrate
+  ```
+
+3. Optionally import the committed demo seed from `data/db.json`:
+
+  ```powershell
+  npm.cmd run db:import-json
+  ```
+
+  This is an upsert by record ID: matching category and transaction IDs are
+  overwritten with the values from `data/db.json`, while other database rows
+  are left in place. Prefer a new, empty database for the demo import. If the
+  target already has real data, back it up and inspect ID collisions first.
+4. Verify the tables and counts using your PostgreSQL client:
+
+  ```sql
+  SELECT count(*) FROM categories;
+  SELECT count(*) FROM transactions;
+  ```
+
+5. Start the API and app using the local setup instructions below.
+
+`db:import-json` reads only the checked-in `data/db.json`; it does not fetch or
+import data from a hosted MockAPI account. If MockAPI currently contains the
+latest transactions, export and back them up separately before switching. The
+importer is intended for a one-time demo-data seed, not as a general migration
+tool for arbitrary API data.
+
+After schema setup, start the PostgreSQL API:
+
+```powershell
+npm.cmd run server
+```
+
+The default API URL remains `http://localhost:3000`, matching
+`VITE_API_BASE_URL`. `npm run server:demo` retains the old JSON Server for
+comparison or recovery, but new app data is written to PostgreSQL by `npm run
+server`.
+
+For Expo Go on a physical phone, set `API_HOST=0.0.0.0`, allow port 3000 through
+Windows Firewall only on a trusted private network, and configure
+`EXPO_PUBLIC_TRANSACTION_API_URL` in `mobile/.env.local` with the computer's LAN
+IP. Native mobile requests do not use browser CORS; web origins must be listed in
+`CORS_ORIGINS`. Never expose this unauthenticated development API to the public
+internet. A deployed app needs the Node API hosted somewhere reachable, a
+persistent PostgreSQL provider, production authentication, HTTPS, and narrowly
+configured CORS origins. Netlify hosts the frontend and receipt functions here;
+the PostgreSQL API is a separate Node service.
+
+### CSV Export
+
+Select **Export CSV** on the Transactions page to download the rows currently
+shown after search, filter and sort. The file includes date, description,
+category, type, amount, currency and merchant. Receipt-total metadata is not
+exported as an additional transaction. Fields are quoted and escaped, and
+spreadsheet formula prefixes are neutralized. An empty result set disables the
+export button.
 
 ### Receipt Purchases
 
@@ -152,9 +244,9 @@ recoverable-tax calculation.
 
 #### Saving and Recovery
 
-The configured JSON Server/MockAPI endpoint must persist and return receipt
-metadata, including `receiptId` and `receiptLineId`. For MockAPI, add these and the
-other receipt metadata fields to the transactions resource schema if needed.
+The PostgreSQL API persists and returns receipt metadata, including `receiptId`
+and `receiptLineId`, in the transaction's JSONB metadata. The JSON seed importer
+also preserves those fields when present in imported transaction records.
 
 Purchases are saved sequentially, not atomically. A failed receipt import keeps
 confirmed purchases and allows retrying only the remaining rows, with receipt
@@ -199,9 +291,9 @@ category editor does not edit these definitions.
 
 Saved purchases include `receiptCategorySource` (`manual`, `jev`, or
 `jev-reviewed`) and `receiptCategorySuggestion` with model, proposed category,
-confidence and chosen-option probability. Configure these metadata fields in
-MockAPI as needed. They capture import-time provenance; subsequent manual edits
-do not rewrite the original suggestion.
+confidence and chosen-option probability. PostgreSQL stores these fields in
+transaction JSONB metadata. They capture import-time provenance; subsequent
+manual edits do not rewrite the original suggestion.
 
 Configure the following **server-only** variables in `.env` for the local
 `npm run receipt-api` command, or in the Netlify Functions environment:
@@ -250,7 +342,9 @@ Important application areas include:
 
 ## Backend / API
 
-The app uses a configurable REST API base URL. For local development, use the included **JSON Server** and `data/db.json`. A hosted **MockAPI** endpoint can be used for a public demo by setting the same environment variable to that endpoint.
+The app uses a configurable REST API base URL. The PostgreSQL API implements
+`/categories` and `/transactions`; see [PostgreSQL API](#postgresql-api) for
+database setup and the one-time importer for `data/db.json`.
 
 Resources:
 
@@ -286,34 +380,37 @@ cd aie1f-frontend-development-project
 npm install
 ```
 
-### 3. Configure the local API environment variable
+### 3. Configure local environment variables
 
-Copy the committed example file to `.env.local`:
+Copy the committed example to the ignored root `.env` file and set
+`DATABASE_URL` to your PostgreSQL database:
 
 ```powershell
-Copy-Item .env.example .env.local
+Copy-Item .env.example .env
 ```
 
-The example config points to the local JSON Server at `http://localhost:3000`.
+The template's `VITE_API_BASE_URL` points to `http://localhost:3000`.
 
-### 4. Start the local API
+### 4. Prepare PostgreSQL and import demo data
 
-In one terminal, start JSON Server:
+Run these once for a fresh database, from the repository root:
+
+```bash
+npm run db:migrate
+npm run db:import-json
+```
+
+### 5. Start the local APIs
+
+In separate terminals, start PostgreSQL-backed transaction storage and the
+receipt API:
 
 ```bash
 npm run server
-```
-This serves the `/categories` and `/transactions` resources from `data/db.json`.
-
-
-In a separate terminal, start Veryfi Server
-```bash
 npm run receipt-api
 ```
-This activates the receipt scanning service on local server.
 
-
-### 5. Start the frontend
+### 6. Start the frontend
 
 In a new terminal, run:
 
@@ -323,7 +420,7 @@ npm run dev
 
 Open the local URL printed by Vite, usually `http://localhost:5173`.
 
-### 6. Run tests and checks
+### 7. Run tests and checks
 
 ```bash
 npm test
@@ -331,7 +428,7 @@ npm run lint
 npm run build
 ```
 
-### 7. Preview the production build locally
+### 8. Preview the production build locally
 
 ```bash
 npm run build
@@ -346,10 +443,12 @@ Vite prints the local preview URL in the terminal.
 
 Deployment platform: Netlify
 
-Configure the following environment variable on the deployment platform before building:
+Set `VITE_API_BASE_URL` to the URL of your deployed PostgreSQL API before
+building. Configure the API's `DATABASE_URL` and allowed `CORS_ORIGINS` on its
+hosting platform. The Netlify frontend does not host `server/api.js`.
 
-```text
-VITE_API_BASE_URL=https://YOUR-PROJECT.mockapi.io/api/v1
+```env
+VITE_API_BASE_URL=https://YOUR-POSTGRES-API.example.com
 ```
 
 To run the VeryFi Receipt Scanner API - Create an account at https://www.veryfi.com and fill up these variables
@@ -422,9 +521,12 @@ Transaction and category data are shared by multiple routes, so the application 
 
 A transaction stores only `categoryId`. The category defines whether the transaction is income or expense. This keeps one source of truth for transaction type.
 
-### Local JSON Server and hosted API
+### PostgreSQL persistence and JSON import
 
-Local development uses JSON Server with `data/db.json` so CRUD operations work without an external account. A hosted MockAPI endpoint can be configured for a public demo using `VITE_API_BASE_URL`.
+The PostgreSQL API keeps transaction routes stable while moving persistence out
+of the browser and JSON Server. The JSON seed importer preserves demo IDs and
+receipt metadata; it can be rerun to upsert the same seed data. `VITE_API_BASE_URL`
+continues to select the API host.
 
 ### Environment-based API configuration
 
@@ -442,7 +544,7 @@ For create, update and delete, the UI changes immediately while the request runs
 - Keeping shared transaction and category state consistent across routes
 - Normalising category data so transaction type is derived from the category
 - Preventing deletion of categories already used by transactions
-- Coordinating API data returned by MockAPI with frontend state
+- Migrating seeded data from JSON Server into PostgreSQL while preserving IDs
 - Designing rollback behaviour for optimistic create/update/delete operations
 - Maintaining responsive and consistent styling across multiple pages
 
